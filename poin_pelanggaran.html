@@ -1,0 +1,477 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sistem Poin Pelanggaran Siswa</title>
+    
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.25/jspdf.plugin.autotable.min.js"></script>
+    
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f4f4f4;
+            margin: 0;
+            padding: 20px;
+            color: #333;
+        }
+        .container {
+            max-width: 900px;
+            margin: auto;
+            background: #fff;
+            padding: 20px 30px;
+            border-radius: 8px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+        }
+        h1, h2 {
+            text-align: center;
+            color: #4a4a4a;
+        }
+        .header-info {
+            background-color: #e9ecef;
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+        .header-info h2 {
+            margin-top: 0;
+        }
+        #total-points.red {
+            color: #dc3545;
+            font-weight: bold;
+        }
+        #total-points.orange {
+            color: #fd7e14;
+            font-weight: bold;
+        }
+        form {
+            display: grid;
+            gap: 15px;
+            grid-template-columns: 1fr 1fr;
+            margin-bottom: 20px;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+        .form-group {
+            display: flex;
+            flex-direction: column;
+        }
+        label {
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        input, select {
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            width: 100%;
+            box-sizing: border-box;
+        }
+        button {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            color: white;
+            cursor: pointer;
+            font-size: 16px;
+            grid-column: span 2;
+        }
+        #add-violation {
+            background-color: #28a745;
+        }
+        #reset-data {
+            background-color: #dc3545;
+            margin-left: 10px;
+        }
+        #print-pdf {
+            background-color: #007bff;
+            margin-top: 10px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+        th, td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+        }
+        th {
+            background-color: #f2f2f2;
+        }
+        tr:hover {
+            background-color: #f9f9f9;
+        }
+        .search-container {
+            text-align: center;
+            margin-bottom: 20px;
+            position: relative;
+        }
+        .search-container input {
+            width: 50%;
+        }
+        .autocomplete-list {
+            position: absolute;
+            z-index: 99;
+            width: 50%;
+            background-color: white;
+            border: 1px solid #ddd;
+            border-top: none;
+            max-height: 150px;
+            overflow-y: auto;
+            left: 50%;
+            transform: translateX(-50%);
+        }
+        .autocomplete-list-item {
+            padding: 10px;
+            cursor: pointer;
+            border-bottom: 1px solid #eee;
+        }
+        .autocomplete-list-item:hover {
+            background-color: #f2f2f2;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>Sistem Poin Pelanggaran Siswa</h1>
+
+    <div class="search-container">
+        <label for="student-name-search">Cari Nama Siswa:</label>
+        <input type="text" id="student-name-search" placeholder="Ketik nama siswa...">
+        <div id="autocomplete-list" class="autocomplete-list"></div>
+    </div>
+
+    <div class="header-info">
+        <h2>Total Poin: <span id="total-points">0</span></h2>
+    </div>
+
+    <form id="violation-form">
+        <div class="form-group">
+            <label for="student-name">Nama Siswa:</label>
+            <input type="text" id="student-name" required>
+        </div>
+        <div class="form-group">
+            <label for="violation-type">Jenis Pelanggaran:</label>
+            <select id="violation-type" required>
+                <option value="" disabled selected>Pilih pelanggaran</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label for="points">Poin:</label>
+            <input type="text" id="points" readonly>
+        </div>
+        <div class="form-group">
+            <label for="date">Tanggal:</label>
+            <input type="date" id="date" required>
+        </div>
+        <button type="submit" id="add-violation">Tambah Pelanggaran</button>
+        <button type="button" id="reset-data">Reset Semua Data</button>
+        <button type="button" id="print-pdf">Cetak Surat Peringatan</button>
+    </form>
+
+    <h2>Riwayat Pelanggaran</h2>
+    <table id="violation-table">
+        <thead>
+            <tr>
+                <th>Tanggal</th>
+                <th>Nama Siswa</th>
+                <th>Jenis Pelanggaran</th>
+                <th>Poin</th>
+                <th>Aksi</th>
+            </tr>
+        </thead>
+        <tbody>
+        </tbody>
+    </table>
+</div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', () => {
+        const violationData = {
+            "Terlambat": -5,
+            "Tidak Berseragam Lengkap": -5,
+            "Membuang Sampah Sembarangan": -5,
+            "Tidak Mengerjakan PR": -10,
+            "Berisik di Kelas": -10,
+            "Mencoret-coret Fasilitas": -10,
+            "Bertengkar/Berkelahi": -25,
+            "Membawa Senjata Tajam": -50
+        };
+
+        const form = document.getElementById('violation-form');
+        const violationTypeSelect = document.getElementById('violation-type');
+        const pointsInput = document.getElementById('points');
+        const tableBody = document.querySelector('#violation-table tbody');
+        const totalPointsDisplay = document.getElementById('total-points');
+        const searchInput = document.getElementById('student-name-search');
+        const resetButton = document.getElementById('reset-data');
+        const printPdfButton = document.getElementById('print-pdf');
+        const autocompleteList = document.getElementById('autocomplete-list');
+
+        // Populate the violation dropdown
+        for (const type in violationData) {
+            const option = document.createElement('option');
+            option.value = type;
+            option.textContent = `${type} (${violationData[type]} Poin)`;
+            violationTypeSelect.appendChild(option);
+        }
+
+        violationTypeSelect.addEventListener('change', () => {
+            const selectedType = violationTypeSelect.value;
+            pointsInput.value = violationData[selectedType] || '';
+        });
+
+        function addViolation(e) {
+            e.preventDefault();
+            const studentName = document.getElementById('student-name').value;
+            const violationType = violationTypeSelect.value;
+            const points = pointsInput.value;
+            const date = document.getElementById('date').value;
+
+            if (studentName && violationType && points && date) {
+                const violation = {
+                    id: Date.now(), // Unique ID for each entry
+                    date,
+                    name: studentName,
+                    type: violationType,
+                    points
+                };
+
+                const row = createRow(violation);
+                tableBody.appendChild(row);
+
+                saveData(violation);
+                form.reset();
+                updatePointsDisplay();
+                updateAutocompleteList();
+            }
+        }
+
+        function createRow(violation) {
+            const row = document.createElement('tr');
+            row.dataset.id = violation.id;
+
+            const cellDate = document.createElement('td');
+            cellDate.textContent = violation.date;
+            row.appendChild(cellDate);
+
+            const cellName = document.createElement('td');
+            cellName.textContent = violation.name;
+            row.appendChild(cellName);
+
+            const cellType = document.createElement('td');
+            cellType.textContent = violation.type;
+            row.appendChild(cellType);
+
+            const cellPoints = document.createElement('td');
+            cellPoints.textContent = violation.points;
+            row.appendChild(cellPoints);
+
+            const cellAction = document.createElement('td');
+            const deleteButton = document.createElement('button');
+            deleteButton.textContent = 'Hapus';
+            deleteButton.style.backgroundColor = '#dc3545';
+            deleteButton.style.color = 'white';
+            deleteButton.style.border = 'none';
+            deleteButton.style.padding = '5px 10px';
+            deleteButton.style.borderRadius = '4px';
+            deleteButton.style.cursor = 'pointer';
+            deleteButton.onclick = () => deleteViolation(violation.id);
+            cellAction.appendChild(deleteButton);
+            row.appendChild(cellAction);
+
+            return row;
+        }
+
+        function deleteViolation(id) {
+            if (confirm("Apakah Anda yakin ingin menghapus pelanggaran ini?")) {
+                let data = JSON.parse(localStorage.getItem('violations')) || [];
+                data = data.filter(violation => violation.id !== id);
+                localStorage.setItem('violations', JSON.stringify(data));
+
+                // Remove row from table
+                const row = document.querySelector(`tr[data-id="${id}"]`);
+                if (row) {
+                    row.remove();
+                }
+                updatePointsDisplay();
+                updateAutocompleteList();
+            }
+        }
+
+        function saveData(violation) {
+            let data = JSON.parse(localStorage.getItem('violations')) || [];
+            data.push(violation);
+            localStorage.setItem('violations', JSON.stringify(data));
+        }
+
+        function loadData() {
+            const data = JSON.parse(localStorage.getItem('violations')) || [];
+            tableBody.innerHTML = ''; // Clear existing rows
+            data.forEach(violation => {
+                const row = createRow(violation);
+                tableBody.appendChild(row);
+            });
+            updatePointsDisplay();
+            updateAutocompleteList();
+        }
+
+        function updatePointsDisplay() {
+            const data = JSON.parse(localStorage.getItem('violations')) || [];
+            const studentName = searchInput.value.trim().toLowerCase();
+            let totalPoints = 0;
+
+            if (studentName === '') {
+                totalPoints = data.reduce((sum, item) => sum + parseInt(item.points), 0);
+            } else {
+                const filteredData = data.filter(item => item.name.toLowerCase() === studentName);
+                totalPoints = filteredData.reduce((sum, item) => sum + parseInt(item.points), 0);
+            }
+
+            totalPointsDisplay.textContent = totalPoints;
+
+            // Update color based on points
+            totalPointsDisplay.classList.remove('orange', 'red');
+            if (totalPoints <= -100) {
+                totalPointsDisplay.classList.add('red');
+            } else if (totalPoints <= -50) {
+                totalPointsDisplay.classList.add('orange');
+            }
+        }
+
+        function filterData() {
+            const searchText = searchInput.value.toLowerCase();
+            const rows = tableBody.getElementsByTagName('tr');
+            for (let i = 0; i < rows.length; i++) {
+                const nameCell = rows[i].cells[1];
+                if (nameCell) {
+                    const name = nameCell.textContent.toLowerCase();
+                    if (name.includes(searchText)) {
+                        rows[i].style.display = "";
+                    } else {
+                        rows[i].style.display = "none";
+                    }
+                }
+            }
+            updatePointsDisplay();
+            updateAutocompleteList();
+        }
+
+        function updateAutocompleteList() {
+            autocompleteList.innerHTML = '';
+            const data = JSON.parse(localStorage.getItem('violations')) || [];
+            const studentNames = [...new Set(data.map(item => item.name))];
+            
+            const searchText = searchInput.value.trim().toLowerCase();
+            const filteredNames = studentNames.filter(name => name.toLowerCase().includes(searchText));
+
+            if (searchText && filteredNames.length > 0) {
+                filteredNames.forEach(name => {
+                    const item = document.createElement('div');
+                    item.classList.add('autocomplete-list-item');
+                    item.textContent = name;
+                    item.onclick = () => {
+                        searchInput.value = name;
+                        filterData();
+                        autocompleteList.innerHTML = '';
+                    };
+                    autocompleteList.appendChild(item);
+                });
+            }
+        }
+
+        function generateWarningPDF() {
+            const { jsPDF } = window.jspdf;
+            const doc = new jsPDF();
+            
+            const studentName = searchInput.value.trim();
+            const totalPoints = parseInt(totalPointsDisplay.textContent);
+            
+            if (!studentName || totalPoints >= 0) {
+                alert("Silakan cari nama siswa dan pastikan ada data pelanggaran untuk dicetak.");
+                return;
+            }
+
+            let warningText = "";
+            let warningLevel = "";
+            if (totalPoints <= -100) {
+                warningLevel = "SURAT PERINGATAN TERAKHIR";
+                warningText = "Surat ini dikeluarkan karena siswa telah mencapai total poin pelanggaran yang sangat tinggi. Diperlukan tindakan tegas dan perhatian serius dari orang tua/wali agar tidak dikeluarkan dari sekolah.";
+            } else if (totalPoints <= -50) {
+                warningLevel = "SURAT PERINGATAN KEDUA";
+                warningText = "Surat peringatan ini dikeluarkan karena siswa telah melewati batas toleransi poin pelanggaran. Mohon kerja sama orang tua/wali untuk mendampingi dan membimbing siswa.";
+            } else if (totalPoints < 0) {
+                warningLevel = "SURAT PERINGATAN PERTAMA";
+                warningText = "Surat ini adalah peringatan pertama terkait akumulasi poin pelanggaran. Mohon perhatian agar perilaku siswa dapat diperbaiki.";
+            }
+            
+            doc.setFontSize(20);
+            doc.text("SURAT PERINGATAN SISWA", 105, 20, null, null, "center");
+            doc.setFontSize(14);
+            doc.text(warningLevel, 105, 30, null, null, "center");
+
+            doc.setFontSize(12);
+            doc.text(`Nama Siswa: ${studentName}`, 20, 50);
+            doc.text(`Total Poin: ${totalPoints}`, 20, 57);
+            doc.text(`Tanggal Cetak: ${new Date().toLocaleDateString('id-ID')}`, 20, 64);
+            
+            doc.text(warningText, 20, 80, { maxWidth: 170 });
+            
+            doc.setFontSize(12);
+            doc.text("Riwayat Pelanggaran:", 20, 100);
+
+            const data = JSON.parse(localStorage.getItem('violations')) || [];
+            const filteredData = data.filter(item => item.name.toLowerCase() === studentName.toLowerCase());
+            
+            const tableHeaders = [["Tanggal", "Jenis Pelanggaran", "Poin"]];
+            const tableBodyData = filteredData.map(item => [item.date, item.type, item.points]);
+            
+            doc.autoTable({
+                startY: 105,
+                head: tableHeaders,
+                body: tableBodyData,
+                theme: 'striped',
+                headStyles: { fillColor: [40, 167, 69] }
+            });
+
+            doc.text("Hormat kami,", 150, doc.autoTable.previous.finalY + 20);
+            doc.text("Wali Kelas / Guru BK", 150, doc.autoTable.previous.finalY + 40);
+
+            doc.save(`Surat Peringatan ${studentName}.pdf`);
+        }
+        
+        function resetAllData() {
+            const confirmation = confirm("Apakah Anda yakin ingin menghapus semua data pelanggaran?");
+            if (confirmation) {
+                localStorage.removeItem('violations');
+                tableBody.innerHTML = '';
+                updatePointsDisplay();
+                updateAutocompleteList();
+            }
+        }
+
+        form.addEventListener('submit', addViolation);
+        searchInput.addEventListener('input', () => {
+            filterData();
+            updateAutocompleteList();
+        });
+        searchInput.addEventListener('blur', () => {
+            setTimeout(() => {
+                autocompleteList.innerHTML = '';
+            }, 200);
+        });
+        resetButton.addEventListener('click', resetAllData);
+        printPdfButton.addEventListener('click', generateWarningPDF);
+        
+        loadData();
+    });
+</script>
+
+</body>
+</html>
